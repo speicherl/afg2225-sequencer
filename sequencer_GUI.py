@@ -165,23 +165,38 @@ class Form(QDialog):
         self.plot_preview()
 
     def refresh_ports(self):
-        """Scannt das System nach verfügbaren VISA-Geräten und befüllt das Dropdown."""
+        """Scannt das System nach verfügbaren VISA-Geräten und befüllt das Dropdown safely."""
         self.combo_ports.clear()
         try:
-            resources = self.rm.list_resources()
+            # 1. Versuche den normalen Scan über PyVISA
+            resources = list(self.rm.list_resources())
+
+            # 2. HARDWARE-FALLBACK FÜR LINUX (Falls PyInstaller/pyserial Geister-Ports würfelt)
+            if platform.system() == "Linux":
+                import glob
+                # Wir scannen direkt das Linux-Dateisystem nach echten USB/ACM-Geräten
+                linux_ports = glob.glob('/dev/ttyACM*') + glob.glob('/dev/ttyUSB*')
+                for lp in linux_ports:
+                    visa_string = f"ASRL{lp}::INSTR"
+                    if visa_string not in resources:
+                        resources.append(visa_string)
+
+            # 3. Dropdown befüllen
             for r in resources:
-                # Bereinigung der Anzeige für den Nutzer
+                # Ignoriere die virtuellen Windows-Geister-Ports, falls wir auf Linux sind
+                if platform.system() == "Linux" and r.startswith("ASRL") and "::INSTR" in r and "/dev/" not in r:
+                    # Filtert "ASRL1::INSTR", "ASRL2::INSTR" etc. aus, wenn kein echter Pfad drinsteckt
+                    continue
+
                 display_name = r
                 if "ASRL/dev/" in r:
-                    # Linux-Darstellung verschönern: ASRL/dev/ttyACM0::INSTR -> /dev/ttyACM0
                     display_name = r.replace("ASRL", "").replace("::INSTR", "")
                 elif "ASRL" in r and "::INSTR" in r:
-                    # Windows-Darstellung verschönern: ASRL10::INSTR -> COM10
                     port_num = r.replace("ASRL", "").replace("::INSTR", "")
                     display_name = f"COM{port_num}"
-                
-                self.combo_ports.addItem(display_name, r) # Anzeigename, echter VISA-String
-                
+
+                self.combo_ports.addItem(display_name, r)
+
             if self.combo_ports.count() == 0:
                 self.combo_ports.addItem("Keine Geräte gefunden")
                 self.btn_connect.setEnabled(False)
