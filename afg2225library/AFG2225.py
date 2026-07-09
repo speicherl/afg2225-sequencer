@@ -68,8 +68,12 @@ class AFG2225:
         timeout = time() + self.timeout
         while not (query_return.__contains__(codeword)):
             self.instrument.write(command)
+            sleep(0.05)
             self.instrument.read()
             query_return = self.instrument.query(query)
+
+            sleep(0.05)
+
             if time() > timeout:
                 print('timeout while changing waveform')
                 break

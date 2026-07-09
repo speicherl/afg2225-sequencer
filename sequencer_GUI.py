@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (QLineEdit, QPushButton, QApplication, QGroupBox, QF
 import pyvisa
 from PyQt6 import QtTest
 from afg2225library import AFG2225
+from live_control import LiveControlDialog
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
@@ -19,7 +20,6 @@ class MplCanvas(FigureCanvas):
         self.axes = fig.add_subplot(111)
         super(MplCanvas, self).__init__(fig)
         fig.tight_layout()
-
 
 class Form(QDialog):
 
@@ -43,7 +43,11 @@ class Form(QDialog):
         main_h_layout = QHBoxLayout()
         left_v_layout = QVBoxLayout()
         
-        # --- NEU: GERÄTE-ANSCHLUSS (DROP-DOWN) ---
+        # ==========================================
+        # 1. ERSTELLUNG ALLER WIDGETS & BUTTONS
+        # ==========================================
+        
+        # --- Hardware-Verbindung ---
         conn_group = QGroupBox("🔌 Hardware-Verbindung")
         conn_layout = QHBoxLayout()
         
@@ -57,22 +61,37 @@ class Form(QDialog):
         conn_layout.addWidget(self.btn_refresh)
         conn_layout.addWidget(self.btn_connect)
         conn_group.setLayout(conn_layout)
-        left_v_layout.addWidget(conn_group)
         
-        # Event-Verknüpfungen für die Verbindung
-        self.btn_refresh.clicked.connect(self.refresh_ports)
-        self.btn_connect.clicked.connect(self.toggle_connection)
+        # --- Globale Buttons (Live, Run, On/Off) ---
+        self.btn_open_live = QPushButton("🎛️ Live-Direktansteuerung öffnen")
+        self.btn_open_live.setStyleSheet("background-color: #e3a21a; color: white; font-weight: bold; padding: 5px;")
+        self.btn_open_live.setEnabled(False)  # Erst aktiv, wenn verbunden!
+        
+        self.button_run_seq = QPushButton("Sequenz mit konstanter Steigung starten")
+        self.button_run_seq.setStyleSheet("background-color: #2b579a; color: white; font-weight: bold; font-size: 13px; padding: 6px;")
+        self.button_run_seq.setEnabled(False)  # Deaktiviert, bis Verbindung steht
+        
+        self.button_on = QPushButton("Ausgang Einschalten (Start)")
+        self.button_on.setEnabled(False)  # Deaktiviert, bis Verbindung steht
+        
+        # ==========================================
+        # 2. POSITIONIERUNG IM LINKEN LAYOUT
+        # ==========================================
+        
+        # Erst die Verbindung, dann die globalen Kontroll-Buttons
+        left_v_layout.addWidget(conn_group)
+        left_v_layout.addWidget(self.btn_open_live)
+        left_v_layout.addWidget(self.button_run_seq)
+        left_v_layout.addWidget(self.button_on)
         
         # --- GLOBALE RAMPEN-EINSTELLUNGEN ---
         glob_group = QGroupBox("Globale Rampen-Einstellungen")
         glob_layout = QVBoxLayout()
         glob_layout.addWidget(QLabel("<b>Gewünschte Steigung (Volt pro Millisekunde, V/ms):</b>"))
         self.edit_slope = QLineEdit("0.5")
-        self.edit_slope.textChanged.connect(self.plot_preview)
         glob_layout.addWidget(self.edit_slope)
         glob_layout.addWidget(QLabel("Konstanter DC-Offset (V):"))
         self.edit_offset = QLineEdit("0.0")
-        self.edit_offset.textChanged.connect(self.plot_preview)
         glob_layout.addWidget(self.edit_offset)
         glob_group.setLayout(glob_layout)
         left_v_layout.addWidget(glob_group)
@@ -83,9 +102,7 @@ class Form(QDialog):
         
         file_btn_layout = QHBoxLayout()
         self.btn_save_seq = QPushButton("💾 Sequenz speichern")
-        self.btn_save_seq.clicked.connect(self.save_sequence_to_file)
         self.btn_load_seq = QPushButton("📂 Sequenz laden")
-        self.btn_load_seq.clicked.connect(self.load_sequence_from_file)
         file_btn_layout.addWidget(self.btn_save_seq)
         file_btn_layout.addWidget(self.btn_load_seq)
         seq_layout.addLayout(file_btn_layout)
@@ -101,27 +118,15 @@ class Form(QDialog):
         btn_layout = QHBoxLayout()
         self.btn_add_signal = QPushButton("+ Signal hinzufügen")
         self.btn_add_signal.setStyleSheet("background-color: #5cb85c; color: white; font-weight: bold;")
-        self.btn_add_signal.clicked.connect(lambda: self.add_signal_row())
         btn_layout.addWidget(self.btn_add_signal)
         seq_layout.addLayout(btn_layout)
         seq_group.setLayout(seq_layout)
+        
         left_v_layout.addWidget(seq_group)
-        
-        # Buttons
-        self.button_run_seq = QPushButton("Sequenz mit konstanter Steigung starten")
-        self.button_run_seq.setStyleSheet("background-color: #2b579a; color: white; font-weight: bold; font-size: 13px; padding: 6px;")
-        self.button_on = QPushButton("Ausgang Einschalten (Start)")
-        
-        # Startzustand: Deaktiviert, bis Verbindung steht
-        self.button_run_seq.setEnabled(False)
-        self.button_on.setEnabled(False)
-        
-        left_v_layout.addWidget(self.button_run_seq)
-        left_v_layout.addWidget(self.button_on)
         
         main_h_layout.addLayout(left_v_layout, stretch=4)
         
-        # --- PLOTTER ---
+        # --- PLOTTER (RECHTES LAYOUT) ---
         plot_group = QGroupBox("Signal-Vorschau (Interaktiv)")
         plot_layout = QVBoxLayout()
         self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
@@ -133,14 +138,29 @@ class Form(QDialog):
         main_h_layout.addWidget(plot_group, stretch=5)
         self.setLayout(main_h_layout)
         
-        # Startkonfiguration
-        self.add_signal_row("1.0", "4", "0.0")
-        self.add_signal_row("2.0", "2", "0.0")
+        # ==========================================
+        # 3. SIGNAL-SLOT CONNECTIONS (EVENTS)
+        # ==========================================
+        self.btn_refresh.clicked.connect(self.refresh_ports)
+        self.btn_connect.clicked.connect(self.toggle_connection)
+        self.btn_open_live.clicked.connect(self.open_live_control)
+        
+        self.edit_slope.textChanged.connect(self.plot_preview)
+        self.edit_offset.textChanged.connect(self.plot_preview)
+        
+        self.btn_save_seq.clicked.connect(self.save_sequence_to_file)
+        self.btn_load_seq.clicked.connect(self.load_sequence_from_file)
+        self.btn_add_signal.clicked.connect(lambda: self.add_signal_row())
         
         self.button_run_seq.clicked.connect(self.run_sequence)
         self.button_on.clicked.connect(self.setOnOff)
         
-        # Beim Start direkt nach Ports suchen
+        # ==========================================
+        # 4. INITIALISIERUNG BEIM START
+        # ==========================================
+        self.add_signal_row("1.0", "4", "0.0")
+        self.add_signal_row("2.0", "2", "0.0")
+        
         self.refresh_ports()
         self.plot_preview()
 
@@ -198,6 +218,7 @@ class Form(QDialog):
                 self.btn_refresh.setEnabled(False)
                 self.button_run_seq.setEnabled(True)
                 self.button_on.setEnabled(True)
+                self.btn_open_live.setEnabled(True)
                 print("⚡ Verbindung erfolgreich hergestellt!")
                 
             except Exception as e:
@@ -217,6 +238,7 @@ class Form(QDialog):
             self.btn_refresh.setEnabled(True)
             self.button_run_seq.setEnabled(False)
             self.button_on.setEnabled(False)
+            self.btn_open_live.setEnabled(False)
             print("Verbindung getrennt.")
 
     def add_signal_row(self, amp="1.0", cycles="5", pause="0.0"):
@@ -469,6 +491,13 @@ class Form(QDialog):
                 self.status = 'Off'
         except Exception as e:
             print(f"Fehler am Ausgang: {e}")
+
+    def open_live_control(self):
+        """Öffnet das ausgelagerte Live-Steuerungsfenster unblockiert."""
+        if self.my_instrument:
+            # Erstellt das Fenster aus der importierten Klasse
+            self.live_dialog = LiveControlDialog(self.my_instrument, self)
+            self.live_dialog.show()
 
 
 if __name__ == '__main__':
