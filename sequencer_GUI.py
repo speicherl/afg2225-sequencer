@@ -426,18 +426,14 @@ class Form(QDialog):
             self.my_instrument.set_offset(offset)
             QtTest.QTest.qWait(100)
             
-            # WICHTIG: Vor der Schleife stellen wir sicher, dass der Ausgang AN ist
-            self.my_instrument.turn_on()
-            self.status = 'On'
-            self.button_on.setText('Ausgang Ausschalten (Stop)')
-            QtTest.QTest.qWait(100)
+            # WICHTIG: Hier oben KEIN vorzeitiges turn_on() mehr!
             
             for idx, row in enumerate(self.signal_rows):
                 a = float(row['amp'].text()) if row['amp'].text() else 1.0
                 c = float(row['cycles'].text()) if row['cycles'].text() else 5.0
                 p = float(row['pause'].text()) if row['pause'].text() else 0.0
                 
-                # (Hier bleibt deine bestehende Amplituden-/Cycles-Validierung...)
+                # (Deine Amplituden-/Cycles-Validierung...)
                 if a > MAX_AMP or a < MIN_AMP: a = max(MIN_AMP, min(MAX_AMP, a)); row['amp'].setText(str(a))
                 if c > MAX_CYCLES or c < MIN_CYCLES: c = max(MIN_CYCLES, min(MAX_CYCLES, c)); row['cycles'].setText(str(int(c)))
                 if p > MAX_PAUSE or p < 0: p = max(0.0, min(MAX_PAUSE, p)); row['pause'].setText(str(p))
@@ -445,17 +441,23 @@ class Form(QDialog):
                 freq_hz = self.calculate_frequency(slope_v_ms, a)
                 duration_s = c / freq_hz if freq_hz > 0 else 0.0
                 
-                # --- SIGNAL WIEDER AN SCHALTEN (für Folgesignale nach einer Pause) ---
-                print(f"[{idx+1}/{len(self.signal_rows)}] Schalte Ausgang AN für Signal...")
-                self.my_instrument.turn_on()
-                QtTest.QTest.qWait(100)
-                
-                print(f"[{idx+1}/{len(self.signal_rows)}] Vpp={a}V | Frequenz: {freq_hz:.2f} Hz | Zeit: {duration_s:.5f}s")
+                # === 1. EINSTELLUNGEN IM HINTERGRUND MACHEN (Ausgang ist noch AUS oder vom vorherigen Schritt im Pause-Zustand) ===
+                print(f"[{idx+1}/{len(self.signal_rows)}] Konfiguriere Parameter im Hintergrund...")
                 self.my_instrument.set_frequency(freq_hz, "Hz")
                 QtTest.QTest.qWait(100)
                 self.my_instrument.set_amplitude(a)
+                QtTest.QTest.qWait(100) # Dem Generator Zeit geben, die Relais intern zu schalten
                 
-                # Signal abwarten
+                # === 2. ERST JETZT DEN AUSGANG EINSCHALTEN ===
+                print(f"[{idx+1}/{len(self.signal_rows)}] Parameter stabil. Schalte Ausgang AN...")
+                self.my_instrument.turn_on()
+                self.status = 'On'
+                self.button_on.setText('Ausgang Ausschalten (Stop)')
+                QtTest.QTest.qWait(50)
+                
+                print(f"[{idx+1}/{len(self.signal_rows)}] Signal läuft: Vpp={a}V | Frequenz: {freq_hz:.2f} Hz")
+                
+                # Signaldauer abwarten
                 QtTest.QTest.qWait(int(duration_s * 1000))
                 
                 # --- PAUSEN-LOGIK: AUSGANG AUSSCHALTEN ---
@@ -464,7 +466,7 @@ class Form(QDialog):
                     self.my_instrument.turn_off()
                     QtTest.QTest.qWait(int(p * 1000))
             
-            # --- AM ENDE DER SEQUENZ: AUSGANG DOCH NOCHMAL AUSSCHALTEN ---
+            # --- AM ENDE DER SEQUENZ: AUSGANG FINAL AUSSCHALTEN ---
             print("--- Sequenz beendet: Schalte Ausgang final AUS ---")
             self.my_instrument.turn_off()
             self.status = 'Off'
