@@ -19,7 +19,7 @@ dependencies = [
     "pyvisa",
     "pyvisa-py",
     "pyusb",
-    "PyQt5",
+    "PyQt5==5.15.10",
     "matplotlib",
     "numpy",
     "pyserial>=3.5",
