@@ -1,15 +1,15 @@
 import sys
 import json
 import numpy as np
-from PyQt5.QtWidgets import (QLineEdit, QPushButton, QApplication, QGroupBox, QFileDialog,
+from PyQt6.QtWidgets import (QLineEdit, QPushButton, QApplication, QGroupBox, QFileDialog,
                              QVBoxLayout, QDialog, QLabel, QHBoxLayout, QScrollArea, QWidget, QComboBox)
 import pyvisa
-from PyQt5 import QtTest
+from PyQt6 import QtTest
 from afg2225library import AFG2225
 
-# Matplotlib-Anbindung für die interaktive PyQt5-Grafik
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+# Aus backend_qt5agg wird backend_qtagg
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
 
@@ -398,6 +398,6 @@ if __name__ == '__main__':
     try:
         # Initialisierung über das stabile PyVISA-Python-Backend
         my_instrument = AFG2225.AFG2225('ASRL/dev/ttyACM0::INSTR')
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
     except Exception as e:
         print("Verbindung fehlgeschlagen:", e)

@@ -14,15 +14,16 @@ license = { text = "GNU 3.0" }
 classifiers = [
     "Programming Language :: Python :: 3",
 ]
+requires-python = ">=3.10"
 # Hier werden alle benötigten Abhängigkeiten fest für das Projekt hinterlegt
 dependencies = [
     "pyvisa",
     "pyvisa-py",
     "pyusb",
-    "PyQt5==5.15.10",
     "matplotlib",
     "numpy",
     "pyserial>=3.5",
+    "pyqt6>=6.11.0",
 ]
 
 [tool.setuptools]
