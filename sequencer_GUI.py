@@ -172,28 +172,42 @@ class Form(QDialog):
             self.btn_connect.setEnabled(False)
 
     def toggle_connection(self):
-        """Stellt die Verbindung her oder trennt sie wieder (Nutzt die angepasste Library)."""
+        """Stellt die Verbindung her oder trennt sie wieder."""
         if self.my_instrument is None:
-            # Verbinden
             visa_resource = self.combo_ports.currentData()
             if not visa_resource:
                 return
             try:
                 print(f"Verbinde mit: {visa_resource}")
-
-                # Übergabe des Ports UND des plattformübergreifenden @py-Managers an deine neue Library-Schnittstelle
-                self.my_instrument = AFG2225.AFG2225(visa_resource, resource_manager=self.rm)
-
+                
+                # 1. Objekt erstellen
+                instance = AFG2225.AFG2225(visa_resource, resource_manager=self.rm)
+                
+                # 2. PRÜFUNG: Hat die Library intern überhaupt ein Instrument öffnen können?
+                if not hasattr(instance, 'instrument') or instance.instrument is None:
+                    # Wenn nicht, werfen wir absichtlich einen Fehler, damit wir im except-Block landen
+                    raise RuntimeError("Schnittstelle konnte nicht geöffnet werden (Kein Gerät antwortet).")
+                
+                # Erst wenn der Test bestanden ist, weisen wir es endgültig zu
+                self.my_instrument = instance
+                
+                # GUI auf "Verbunden" umstellen
                 self.btn_connect.setText("🛑 Trennen")
                 self.btn_connect.setStyleSheet("background-color: #d9534f; color: white; font-weight: bold;")
                 self.combo_ports.setEnabled(False)
                 self.btn_refresh.setEnabled(False)
                 self.button_run_seq.setEnabled(True)
                 self.button_on.setEnabled(True)
-                print("Verbindung erfolgreich hergestellt!")
+                print("⚡ Verbindung erfolgreich hergestellt!")
+                
             except Exception as e:
-                print(f"Verbindungsfehler: {e}")
+                print(f"❌ Verbindungsfehler abgefangen: {e}")
                 self.my_instrument = None
+                # Dem Nutzer kurzes Feedback in der GUI geben (optional)
+                self.btn_connect.setText("⚡ Verbinden fehlgeschlagen")
+                QtTest.QTest.qWait(1500)
+                self.btn_connect.setText("⚡ Verbinden")
+
         else:
             # Trennen
             self.my_instrument = None
@@ -381,7 +395,7 @@ class Form(QDialog):
                 self.edit_slope.setStyleSheet("")
 
             offset = float(self.edit_offset.text()) if self.edit_offset.text() else 0.0
-            
+                        
             print("--- Starte Hardware-Sequenzlauf ---")
             self.my_instrument.set_waveform("ramp")
             QtTest.QTest.qWait(100)
@@ -390,48 +404,50 @@ class Form(QDialog):
             self.my_instrument.set_offset(offset)
             QtTest.QTest.qWait(100)
             
+            # WICHTIG: Vor der Schleife stellen wir sicher, dass der Ausgang AN ist
+            self.my_instrument.turn_on()
+            self.status = 'On'
+            self.button_on.setText('Ausgang Ausschalten (Stop)')
+            QtTest.QTest.qWait(100)
+            
             for idx, row in enumerate(self.signal_rows):
                 a = float(row['amp'].text()) if row['amp'].text() else 1.0
                 c = float(row['cycles'].text()) if row['cycles'].text() else 5.0
                 p = float(row['pause'].text()) if row['pause'].text() else 0.0
                 
-                if a > MAX_AMP or a < MIN_AMP:
-                    a = max(MIN_AMP, min(MAX_AMP, a))
-                    row['amp'].setText(str(a))
-                    row['amp'].setStyleSheet("background-color: #ffcccc;")
-                else:
-                    row['amp'].setStyleSheet("")
-
-                if c > MAX_CYCLES or c < MIN_CYCLES:
-                    c = max(MIN_CYCLES, min(MAX_CYCLES, c))
-                    row['cycles'].setText(str(int(c)))
-                    row['cycles'].setStyleSheet("background-color: #ffcccc;")
-                else:
-                    row['cycles'].setStyleSheet("")
-
-                if p > MAX_PAUSE or p < 0:
-                    p = max(0.0, min(MAX_PAUSE, p))
-                    row['pause'].setText(str(p))
-                    row['pause'].setStyleSheet("background-color: #ffcccc;")
-                else:
-                    row['pause'].setStyleSheet("")
+                # (Hier bleibt deine bestehende Amplituden-/Cycles-Validierung...)
+                if a > MAX_AMP or a < MIN_AMP: a = max(MIN_AMP, min(MAX_AMP, a)); row['amp'].setText(str(a))
+                if c > MAX_CYCLES or c < MIN_CYCLES: c = max(MIN_CYCLES, min(MAX_CYCLES, c)); row['cycles'].setText(str(int(c)))
+                if p > MAX_PAUSE or p < 0: p = max(0.0, min(MAX_PAUSE, p)); row['pause'].setText(str(p))
 
                 freq_hz = self.calculate_frequency(slope_v_ms, a)
                 duration_s = c / freq_hz if freq_hz > 0 else 0.0
                 
-                print(f"[{idx+1}/{len(self.signal_rows)}] Vpp={a}V | Frequenz: {freq_hz:.2f} Hz | Zeit: {duration_s:.5f}s")
+                # --- SIGNAL WIEDER AN SCHALTEN (für Folgesignale nach einer Pause) ---
+                print(f"[{idx+1}/{len(self.signal_rows)}] Schalte Ausgang AN für Signal...")
+                self.my_instrument.turn_on()
+                QtTest.QTest.qWait(100)
                 
+                print(f"[{idx+1}/{len(self.signal_rows)}] Vpp={a}V | Frequenz: {freq_hz:.2f} Hz | Zeit: {duration_s:.5f}s")
                 self.my_instrument.set_frequency(freq_hz, "Hz")
                 QtTest.QTest.qWait(100)
                 self.my_instrument.set_amplitude(a)
                 
+                # Signal abwarten
                 QtTest.QTest.qWait(int(duration_s * 1000))
                 
+                # --- PAUSEN-LOGIK: AUSGANG AUSSCHALTEN ---
                 if p > 0:
-                    self.my_instrument.set_amplitude(0.01)
+                    print(f"[{idx+1}/{len(self.signal_rows)}] Pause aktiv: Schalte Ausgang für {p}s AUS...")
+                    self.my_instrument.turn_off()
                     QtTest.QTest.qWait(int(p * 1000))
             
-            print("--- Hardware-Sequenz beendet ---")
+            # --- AM ENDE DER SEQUENZ: AUSGANG DOCH NOCHMAL AUSSCHALTEN ---
+            print("--- Sequenz beendet: Schalte Ausgang final AUS ---")
+            self.my_instrument.turn_off()
+            self.status = 'Off'
+            self.button_on.setText('Ausgang Einschalten (Start)')
+            
             self.plot_preview()
             
         except ValueError:
