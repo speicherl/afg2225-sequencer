@@ -1,12 +1,12 @@
 import sys
+import json
 import numpy as np
-from PyQt5.QtWidgets import (QLineEdit, QPushButton, QApplication, QGroupBox,
+from PyQt5.QtWidgets import (QLineEdit, QPushButton, QApplication, QGroupBox, QFileDialog,
                              QVBoxLayout, QDialog, QLabel, QHBoxLayout, QScrollArea, QWidget)
 import pyvisa
 from PyQt5 import QtTest
 from afg2225library import AFG2225
 
-# NEU: Import der Navigation Toolbar für PyQt5
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
@@ -25,9 +25,9 @@ class Form(QDialog):
     def __init__(self, parent=None):
         super(Form, self).__init__(parent)
         self.status = 'Off'
-        self.setWindowTitle("AFG-2225 - Sequenzer & Interaktiver Plotter")
+        self.setWindowTitle("AFG-2225 - Sequenzer mit Speicherfunktion")
         self.setMinimumWidth(950)
-        self.resize(1000, 630)
+        self.resize(1000, 650)
 
         self.signal_rows = []
 
@@ -52,6 +52,16 @@ class Form(QDialog):
         seq_group = QGroupBox("Signal-Abfolge (Konstante Steigung)")
         seq_layout = QVBoxLayout()
 
+        # NEU: Datei-Aktionen (Speichern / Laden) ganz oben in der Sektion
+        file_btn_layout = QHBoxLayout()
+        self.btn_save_seq = QPushButton("💾 Sequenz speichern")
+        self.btn_save_seq.clicked.connect(self.save_sequence_to_file)
+        self.btn_load_seq = QPushButton("📂 Sequenz laden")
+        self.btn_load_seq.clicked.connect(self.load_sequence_from_file)
+        file_btn_layout.addWidget(self.btn_save_seq)
+        file_btn_layout.addWidget(self.btn_load_seq)
+        seq_layout.addLayout(file_btn_layout)
+
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll_content = QWidget()
@@ -63,7 +73,7 @@ class Form(QDialog):
         btn_layout = QHBoxLayout()
         self.btn_add_signal = QPushButton("+ Signal hinzufügen")
         self.btn_add_signal.setStyleSheet("background-color: #5cb85c; color: white; font-weight: bold;")
-        self.btn_add_signal.clicked.connect(self.add_signal_row)
+        self.btn_add_signal.clicked.connect(lambda: self.add_signal_row())
         btn_layout.addWidget(self.btn_add_signal)
         seq_layout.addLayout(btn_layout)
         seq_group.setLayout(seq_layout)
@@ -78,16 +88,11 @@ class Form(QDialog):
 
         main_h_layout.addLayout(left_v_layout, stretch=4)
 
-        # --- PLOTTER (JETZT MIT INTERAKTIVER TOOLBAR) ---
+        # --- PLOTTER ---
         plot_group = QGroupBox("Signal-Vorschau (Interaktiv)")
         plot_layout = QVBoxLayout()
-
         self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
-
-        # NEU: Toolbar erstellen und mit dem Canvas verknüpfen
         self.toolbar = NavigationToolbar(self.canvas, self)
-
-        # Erst die Toolbar, dann das Diagramm ins Layout packen
         plot_layout.addWidget(self.toolbar)
         plot_layout.addWidget(self.canvas)
         plot_group.setLayout(plot_layout)
@@ -95,7 +100,7 @@ class Form(QDialog):
         main_h_layout.addWidget(plot_group, stretch=5)
         self.setLayout(main_h_layout)
 
-        # Startkonfiguration
+        # Startkonfiguration mit 2 Signalen
         self.add_signal_row()
         self.add_signal_row()
         if len(self.signal_rows) > 1:
@@ -109,21 +114,22 @@ class Form(QDialog):
 
         self.plot_preview()
 
-    def add_signal_row(self):
+    def add_signal_row(self, amp="1.0", cycles="5", pause="0.0"):
+        """Fügt eine Zeile hinzu (jetzt mit optionalen Startwerten fürs Laden)."""
         row_widget = QWidget()
         row_h_layout = QHBoxLayout(row_widget)
         row_h_layout.setContentsMargins(0, 4, 0, 4)
 
         lbl = QLabel()
-        edit_a = QLineEdit("1.0")
+        edit_a = QLineEdit(amp)
         edit_a.setFixedWidth(60)
         edit_a.textChanged.connect(self.plot_preview)
 
-        edit_c = QLineEdit("5")
+        edit_c = QLineEdit(cycles)
         edit_c.setFixedWidth(50)
         edit_c.textChanged.connect(self.plot_preview)
 
-        edit_p = QLineEdit("0.0")
+        edit_p = QLineEdit(pause)
         edit_p.setFixedWidth(50)
         edit_p.textChanged.connect(self.plot_preview)
 
@@ -165,6 +171,64 @@ class Form(QDialog):
     def update_row_numbers(self):
         for idx, row in enumerate(self.signal_rows):
             row['label'].setText(f"<b>S{idx + 1}:</b>")
+
+    # --- NEU: SPEICHER-METHODE ---
+    def save_sequence_to_file(self):
+        try:
+            # Bereite Datenstruktur zum Speichern vor
+            data_to_save = {
+                'slope': self.edit_slope.text(),
+                'offset': self.edit_offset.text(),
+                'signals': []
+            }
+
+            for row in self.signal_rows:
+                data_to_save['signals'].append({
+                    'amp': row['amp'].text(),
+                    'cycles': row['cycles'].text(),
+                    'pause': row['pause'].text()
+                })
+
+            # Öffne den Dateidialog zum Speichern
+            filename, _ = QFileDialog.getSaveFileName(self, "Sequenz speichern", "", "JSON Files (*.json)")
+            if filename:
+                # Falls die Endung fehlt, hänge sie an
+                if not filename.endswith('.json'):
+                    filename += '.json'
+                with open(filename, 'w') as f:
+                    json.dump(data_to_save, f, indent=4)
+                print(f"Sequenz erfolgreich unter '{filename}' gespeichert.")
+        except Exception as e:
+            print(f"Fehler beim Speichern der Datei: {e}")
+
+    # --- NEU: LADE-METHODE ---
+    def load_sequence_from_file(self):
+        try:
+            filename, _ = QFileDialog.getOpenFileName(self, "Sequenz laden", "", "JSON Files (*.json)")
+            if filename:
+                with open(filename, 'r') as f:
+                    loaded_data = json.load(f)
+
+                # Globale Werte setzen
+                self.edit_slope.setText(loaded_data.get('slope', '0.5'))
+                self.edit_offset.setText(loaded_data.get('offset', '0.0'))
+
+                # Alle alten Zeilen rigoros weglöschen
+                for row in list(self.signal_rows):
+                    self.signal_rows.remove(row)
+                    row['widget'].deleteLater()
+
+                # Kurz warten, damit Qt das Layout bereinigen kann
+                QtTest.QTest.qWait(50)
+
+                # Geladene Signalzeilen neu aufbauen
+                for sig in loaded_data.get('signals', []):
+                    self.add_signal_row(amp=sig['amp'], cycles=sig['cycles'], pause=sig['pause'])
+
+                print(f"Sequenz aus '{filename}' erfolgreich geladen!")
+                self.plot_preview()
+        except Exception as e:
+            print(f"Fehler beim Laden der Datei (Evtl. beschädigtes Format): {e}")
 
     def generate_ramp_data(self, t_start, duration, freq_hz, amp_vpp, offset):
         t = np.linspace(t_start, t_start + duration, max(2, int(duration * 50000)))
