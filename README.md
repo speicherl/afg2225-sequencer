@@ -65,5 +65,13 @@ uv run sequencer_GUI.py
 * Wähle den erkannten Port aus (z. B. `/dev/ttyACM0` oder `COM10`) und klicke auf **⚡ Verbinden**.
 * Nach erfolgreichem Verbindungsaufbau werden alle Steuerungselemente sowie das Live-Fenster freigeschaltet.
 
-## Credits
-Die Library ist modifiziert aus dem Original-Projekt zu finden auf: https://git.bsse.ethz.ch/pruppen/afg2225-library
+---
+
+## 📜 Credits & Danksagung
+
+Dieses Projekt basiert auf der ursprünglichen Python-Bibliothek zur Steuerung des GW-Instek AFG-2225, die von **Peter Ruppen (2019)** entwickelt wurde. 
+
+Der originale Quellcode für die Hardware-Ansteuerung und die grundlegenden SCPI-Klassen stammen aus seinem Repository:
+🔗 [BSSE ETH Zürich - afg2225-library](https://git.bsse.ethz.ch/pruppen/afg2225-library)
+
+*Vielen Dank für die solide Grundlage, auf der dieser Sequenzer und die GUI aufgebaut werden konnten!*
