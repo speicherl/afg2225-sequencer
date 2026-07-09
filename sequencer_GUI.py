@@ -6,7 +6,9 @@ import pyvisa
 from PyQt5 import QtTest
 from afg2225library import AFG2225
 
+# NEU: Import der Navigation Toolbar für PyQt5
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 
 
@@ -23,9 +25,9 @@ class Form(QDialog):
     def __init__(self, parent=None):
         super(Form, self).__init__(parent)
         self.status = 'Off'
-        self.setWindowTitle("AFG-2225 - Konstante Steigung (V/ms) Sequenzer")
+        self.setWindowTitle("AFG-2225 - Sequenzer & Interaktiver Plotter")
         self.setMinimumWidth(950)
-        self.resize(1000, 600)
+        self.resize(1000, 630)
 
         self.signal_rows = []
 
@@ -35,18 +37,14 @@ class Form(QDialog):
         # --- GLOBALE RAMPEN-EINSTELLUNGEN ---
         glob_group = QGroupBox("Globale Rampen-Einstellungen")
         glob_layout = QVBoxLayout()
-
-        # Führender Parameter: Steigung in V/ms
         glob_layout.addWidget(QLabel("<b>Gewünschte Steigung (Volt pro Millisekunde, V/ms):</b>"))
         self.edit_slope = QLineEdit("0.5")
         self.edit_slope.textChanged.connect(self.plot_preview)
         glob_layout.addWidget(self.edit_slope)
-
         glob_layout.addWidget(QLabel("Konstanter DC-Offset (V):"))
         self.edit_offset = QLineEdit("0.0")
         self.edit_offset.textChanged.connect(self.plot_preview)
         glob_layout.addWidget(self.edit_offset)
-
         glob_group.setLayout(glob_layout)
         left_v_layout.addWidget(glob_group)
 
@@ -80,23 +78,30 @@ class Form(QDialog):
 
         main_h_layout.addLayout(left_v_layout, stretch=4)
 
-        # --- PLOTTER ---
-        plot_group = QGroupBox("Signal-Vorschau (Parallelflanken)")
+        # --- PLOTTER (JETZT MIT INTERAKTIVER TOOLBAR) ---
+        plot_group = QGroupBox("Signal-Vorschau (Interaktiv)")
         plot_layout = QVBoxLayout()
+
         self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
+
+        # NEU: Toolbar erstellen und mit dem Canvas verknüpfen
+        self.toolbar = NavigationToolbar(self.canvas, self)
+
+        # Erst die Toolbar, dann das Diagramm ins Layout packen
+        plot_layout.addWidget(self.toolbar)
         plot_layout.addWidget(self.canvas)
         plot_group.setLayout(plot_layout)
 
         main_h_layout.addWidget(plot_group, stretch=5)
         self.setLayout(main_h_layout)
 
-        # Startkonfiguration (S1: kleine Amplitude, S2: große Amplitude)
+        # Startkonfiguration
         self.add_signal_row()
         self.add_signal_row()
         if len(self.signal_rows) > 1:
-            self.signal_rows[0]['amp'].setText("1.0")  # 1.0 Vpp
+            self.signal_rows[0]['amp'].setText("1.0")
             self.signal_rows[0]['cycles'].setText("4")
-            self.signal_rows[1]['amp'].setText("2.0")  # 2.0 Vpp
+            self.signal_rows[1]['amp'].setText("2.0")
             self.signal_rows[1]['cycles'].setText("2")
 
         self.button_run_seq.clicked.connect(self.run_sequence)
@@ -110,7 +115,6 @@ class Form(QDialog):
         row_h_layout.setContentsMargins(0, 4, 0, 4)
 
         lbl = QLabel()
-
         edit_a = QLineEdit("1.0")
         edit_a.setFixedWidth(60)
         edit_a.textChanged.connect(self.plot_preview)
@@ -167,9 +171,7 @@ class Form(QDialog):
         if freq_hz <= 0:
             return t, np.zeros_like(t) + offset
 
-        # Phasenkompensation für den Nulldurchgang an der X-Achse (50% Symmetrie vorausgesetzt)
         phase = ((t - t_start) * freq_hz + 0.25) % 1.0
-
         y = np.zeros_like(phase)
         mask1 = phase <= 0.5
         y[mask1] = phase[mask1] / 0.5
@@ -180,11 +182,9 @@ class Form(QDialog):
         return t, y
 
     def calculate_frequency(self, slope_v_ms, amp_vpp):
-        """Berechnet die benötigte Frequenz in Hz für eine konstante Steigung."""
         if amp_vpp <= 0:
             return 0.0
-        slope_v_s = slope_v_ms * 1000.0  # Umrechnung von V/ms in V/s
-        # Formel: f = m / (2 * Vpp) für ein 50% symmetrisches Dreieck
+        slope_v_s = slope_v_ms * 1000.0
         return slope_v_s / (2.0 * amp_vpp)
 
     def plot_preview(self):
@@ -203,7 +203,6 @@ class Form(QDialog):
                 c = float(row['cycles'].text()) if row['cycles'].text() else 0.0
                 p = float(row['pause'].text()) if row['pause'].text() else 0.0
 
-                # Frequenz vollautomatisch berechnen
                 freq_hz = self.calculate_frequency(slope_v_ms, a)
                 d = c / freq_hz if freq_hz > 0 else 0.0
 
@@ -249,7 +248,7 @@ class Form(QDialog):
 
             my_instrument.set_waveform("ramp")
             QtTest.QTest.qWait(100)
-            my_instrument.set_ramp_symmetry(50.0)  # Festgelegt auf 50% Dreieck für mathematische Steigung
+            my_instrument.set_ramp_symmetry(50.0)
             QtTest.QTest.qWait(100)
             my_instrument.set_offset(offset)
             QtTest.QTest.qWait(100)
@@ -259,18 +258,15 @@ class Form(QDialog):
                 c = float(row['cycles'].text())
                 p = float(row['pause'].text())
 
-                # Frequenz dynamisch für diesen Schritt ermitteln
                 freq_hz = self.calculate_frequency(slope_v_ms, a)
                 duration_s = c / freq_hz if freq_hz > 0 else 0.0
 
-                print(f"[{idx+1}/{len(self.signal_rows)}] Vpp={a}V | Berechnete Frequenz: {freq_hz:.2f} Hz | Laufzeit: {duration_s:.5f}s")
+                print(f"[{idx+1}/{len(self.signal_rows)}] Vpp={a}V | Frequenz: {freq_hz:.2f} Hz | Laufzeit: {duration_s:.5f}s")
 
-                # Gerät programmieren
                 my_instrument.set_frequency(freq_hz, "Hz")
                 QtTest.QTest.qWait(100)
                 my_instrument.set_amplitude(a)
 
-                # Exakte Verweilzeit abwarten
                 QtTest.QTest.qWait(int(duration_s * 1000))
 
                 if p > 0:
