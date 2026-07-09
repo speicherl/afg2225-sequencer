@@ -61,8 +61,9 @@ Wenn du den modernen Python-Paketmanager `uv` nutzt, musst du Python nicht manue
 
 1. **Repository klonen & in den Ordner wechseln:**
 ```bash
-git clone <deine-repo-url>
-cd afg2225-library-master
+git clone <git@github.com:speicherl/afg2225-sequencer.git
+>
+cd afg2225-sequencer
 ```
 
 
