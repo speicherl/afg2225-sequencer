@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# All sequence files
+*.json
