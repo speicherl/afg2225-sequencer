@@ -1,6 +1,6 @@
 import sys
 from PyQt5.QtWidgets import (QLineEdit, QPushButton, QApplication,
-                             QVBoxLayout, QDialog)
+                             QVBoxLayout, QDialog, QComboBox, QLabel, QHBoxLayout)
 import pyvisa
 from PyQt5 import QtTest
 from afg2225library import AFG2225
@@ -10,75 +10,116 @@ class Form(QDialog):
 
     def __init__(self, parent=None):
         super(Form, self).__init__(parent)
-        self.status = 'Off'  # output on or off
+        self.status = 'Off'  # Status des Ausgangs
+        self.setWindowTitle("GW-Instek AFG-2225 Steuerung")
 
-        # Create widgets with modern placeholders instead of default text
-        self.edit_freq = QLineEdit()
-        self.edit_freq.setPlaceholderText("Frequenz eingeben (z.B. 1.5)")
-
-        self.edit_amp = QLineEdit()
-        self.edit_amp.setPlaceholderText("Amplitude eingeben (z.B. 2.0)")
-
-        self.button_set = QPushButton("Change Waveform")
-        self.button_on = QPushButton("Start")
-
-        # Create layout and add widgets
+        # Layouts erstellen
         layout = QVBoxLayout()
-        layout.addWidget(self.edit_freq)
-        layout.addWidget(self.edit_amp)
+
+        # 1. Signalform-Auswahl (Dropdown)
+        layout.addWidget(QLabel("Signalform:"))
+        self.combo_wave = QComboBox()
+        self.combo_wave.addItems(["sine", "square", "ramp", "pulse", "noise"])
+        layout.addWidget(self.combo_wave)
+
+        # 2. Frequenz (Wert + Einheit)
+        layout.addWidget(QLabel("Frequenz:"))
+        freq_layout = QHBoxLayout()
+        self.edit_freq = QLineEdit()
+        self.edit_freq.setPlaceholderText("z.B. 1.0")
+        self.combo_freq_unit = QComboBox()
+        self.combo_freq_unit.addItems(["Hz", "kHz", "MHz"])
+        self.combo_freq_unit.setCurrentText("kHz")  # Standardmäßig kHz
+        freq_layout.addWidget(self.edit_freq)
+        freq_layout.addWidget(self.combo_freq_unit)
+        layout.addLayout(freq_layout)
+
+        # 3. Amplitude
+        layout.addWidget(QLabel("Amplitude (Vpp):"))
+        amp_layout = QHBoxLayout()
+        self.edit_amp = QLineEdit()
+        self.edit_amp.setPlaceholderText("z.B. 2.5")
+        amp_layout.addWidget(self.edit_amp)
+        amp_layout.addWidget(QLabel("V"))
+        layout.addLayout(amp_layout)
+
+        # 4. DC-Offset
+        layout.addWidget(QLabel("DC-Offset:"))
+        offset_layout = QHBoxLayout()
+        self.edit_offset = QLineEdit()
+        self.edit_offset.setPlaceholderText("z.B. 0.0")
+        offset_layout.addWidget(self.edit_offset)
+        offset_layout.addWidget(QLabel("V"))
+        layout.addLayout(offset_layout)
+
+        # 5. Aktions-Buttons
+        self.button_set = QPushButton("Parameter anwenden")
+        self.button_on = QPushButton("Ausgang Einschalten (Start)")
+
         layout.addWidget(self.button_set)
         layout.addWidget(self.button_on)
 
-        # Set dialog layout
+        # Layout zuweisen
         self.setLayout(layout)
 
-        # Add button signal to greetings slot
-        self.button_set.clicked.connect(self.update_button_set)
+        # Signale verknüpfen
+        self.button_set.clicked.connect(self.update_generator_settings)
         self.button_on.clicked.connect(self.setOnOff)
 
-    def update_button_set(self):
+    def update_generator_settings(self):
         try:
-            # TEXT IN ZAHLEN (FLOAT) UMWANDELN:
-            freq_value = float(self.edit_freq.text())
-            amp_value = float(self.edit_amp.text())
+            # Werte aus der UI auslesen und konvertieren
+            waveform = self.combo_wave.currentText()
+            freq_value = float(self.edit_freq.text()) if self.edit_freq.text() else 1.0
+            freq_unit = self.combo_freq_unit.currentText()
+            amp_value = float(self.edit_amp.text()) if self.edit_amp.text() else 1.0
+            offset_value = float(self.edit_offset.text()) if self.edit_offset.text() else 0.0
 
-            # Wichtig: Im GUI-Code steht standardmäßig "MHz" als Argument,
-            # deine Platzhalter sagten "kHz". Wenn du 1000 eingibst bei MHz, sind das 1000 MHz (1 GHz).
-            # Ich lasse es hier auf "MHz", passe deine Eingabe im Kopf oder die Einheit hier an.
-            my_instrument.set_frequency(freq_value, "kHz")
+            print(f"Sende: {waveform}, {freq_value} {freq_unit}, {amp_value} Vpp, Offset: {offset_value} V")
 
-            QtTest.QTest.qWait(50) # Warten für das serielle Backend
+            # Befehle nacheinander mit kurzen Pausen absetzen
+            my_instrument.set_waveform(waveform)
+            QtTest.QTest.qWait(50)
+
+            my_instrument.set_frequency(freq_value, freq_unit)
+            QtTest.QTest.qWait(50)
 
             my_instrument.set_amplitude(amp_value)
-            print(f"Erfolgreich gesetzt: {freq_value} MHz, {amp_value} V")
+            QtTest.QTest.qWait(50)
+
+            my_instrument.set_offset(offset_value)
+            print("Parameter erfolgreich an das Gerät übertragen.")
 
         except ValueError:
-            print("Fehler: Bitte gültige Zahlen in die Textfelder eingeben!")
+            print("Fehler: Bitte trage gültige Zahlen in die Textfelder ein!")
+        except Exception as e:
+            print(f"Fehler bei der Kommunikation: {e}")
 
     def setOnOff(self):
-        if self.status == 'Off':
-            my_instrument.turn_on()
-            self.button_on.setText('Stop')
-            self.status = 'On'
-        else:
-            my_instrument.turn_off()
-            self.button_on.setText('Start')
-            self.status = 'Off'
+        try:
+            if self.status == 'Off':
+                my_instrument.turn_on()
+                self.button_on.setText('Ausgang Ausschalten (Stop)')
+                self.status = 'On'
+            else:
+                my_instrument.turn_off()
+                self.button_on.setText('Ausgang Einschalten (Start)')
+                self.status = 'Off'
+        except Exception as e:
+            print(f"Fehler beim Schalten des Ausgangs: {e}")
 
 
 if __name__ == '__main__':
-    # Create the Qt Application
     app = QApplication(sys.argv)
-    # Create and show the form
     form = Form()
     form.show()
 
     try:
-        # Verbindung über unser funktionierendes ASRL/py-Backend aufbauen
+        # Initialisierung über das funktionierende virtuelle serielle Backend
         my_instrument = AFG2225.AFG2225('ASRL/dev/ttyACM0::INSTR')
 
-        # Run the main Qt loop
+        # Starte Qt Event-Loop
         sys.exit(app.exec_())
 
     except Exception as e:
-        print("No device connected or Error:", e)
+        print("Verbindung zum Funktionsgenerator fehlgeschlagen:", e)
