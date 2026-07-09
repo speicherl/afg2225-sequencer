@@ -64,3 +64,6 @@ uv run sequencer_GUI.py
 * Klicke oben im Fenster auf **🔄 Aktualisieren**, um die USB-Kanäle zu scannen.
 * Wähle den erkannten Port aus (z. B. `/dev/ttyACM0` oder `COM10`) und klicke auf **⚡ Verbinden**.
 * Nach erfolgreichem Verbindungsaufbau werden alle Steuerungselemente sowie das Live-Fenster freigeschaltet.
+
+## Credits
+Die Library ist modifiziert aus dem Original-Projekt zu finden auf: https://git.bsse.ethz.ch/pruppen/afg2225-library
