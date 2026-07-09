@@ -305,11 +305,36 @@ class Form(QDialog):
             if not self.signal_rows:
                 return
 
-            slope_v_ms = float(self.edit_slope.text())
-            offset = float(self.edit_offset.text())
+            # ====================================================
+            # 🛡️ DEINE MAXIMAL- UND MINIMALWERTE (HIER ANPASSEN)
+            # ====================================================
+            MAX_SLOPE = 10.0    # Maximal 10 V/ms
+            MIN_SLOPE = 0.001   # Minimal 0.001 V/ms
+            MAX_AMP = 10.0      # Maximal 10 Vpp (Schutz für deine Schaltung)
+            MIN_AMP = 0.01      # Minimal 10 mVpp
+            MAX_CYCLES = 10000  # Maximal 10.000 Perioden am Stück
+            MIN_CYCLES = 1
+            MAX_PAUSE = 60.0    # Maximal 60 Sekunden Pause
+            # ====================================================
 
-            print("--- Starte Sequenz mit konstanter Steigung ---")
+            # 1. Globale Werte auslesen und validieren
+            slope_v_ms = float(self.edit_slope.text()) if self.edit_slope.text() else 0.5
+            if slope_v_ms > MAX_SLOPE:
+                slope_v_ms = MAX_SLOPE
+                self.edit_slope.setText(str(MAX_SLOPE))
+                self.edit_slope.setStyleSheet("background-color: #ffcccc;") # Visuelle Warnung (Rot)
+            elif slope_v_ms < MIN_SLOPE:
+                slope_v_ms = MIN_SLOPE
+                self.edit_slope.setText(str(MIN_SLOPE))
+                self.edit_slope.setStyleSheet("background-color: #ffcccc;")
+            else:
+                self.edit_slope.setStyleSheet("") # Normaler Hintergrund
 
+            offset = float(self.edit_offset.text()) if self.edit_offset.text() else 0.0
+
+            print("--- Starte validierte Signal-Abfolge ---")
+
+            # Grundsetup auf dem Gerät hardwareseitig vorbereiten
             my_instrument.set_waveform("ramp")
             QtTest.QTest.qWait(100)
             my_instrument.set_ramp_symmetry(50.0)
@@ -317,16 +342,55 @@ class Form(QDialog):
             my_instrument.set_offset(offset)
             QtTest.QTest.qWait(100)
 
+            # 2. Schleife über alle Zeilen mit Einzelwert-Abfang
             for idx, row in enumerate(self.signal_rows):
-                a = float(row['amp'].text())
-                c = float(row['cycles'].text())
-                p = float(row['pause'].text())
+                a = float(row['amp'].text()) if row['amp'].text() else 1.0
+                c = float(row['cycles'].text()) if row['cycles'].text() else 5.0
+                p = float(row['pause'].text()) if row['pause'].text() else 0.0
 
+                # Amplituden-Schutz
+                if a > MAX_AMP:
+                    a = MAX_AMP
+                    row['amp'].setText(str(MAX_AMP))
+                    row['amp'].setStyleSheet("background-color: #ffcccc;")
+                elif a < MIN_AMP:
+                    a = MIN_AMP
+                    row['amp'].setText(str(MIN_AMP))
+                    row['amp'].setStyleSheet("background-color: #ffcccc;")
+                else:
+                    row['amp'].setStyleSheet("")
+
+                # Cycles-Schutz
+                if c > MAX_CYCLES:
+                    c = MAX_CYCLES
+                    row['cycles'].setText(str(MAX_CYCLES))
+                    row['cycles'].setStyleSheet("background-color: #ffcccc;")
+                elif c < MIN_CYCLES:
+                    c = MIN_CYCLES
+                    row['cycles'].setText(str(MIN_CYCLES))
+                    row['cycles'].setStyleSheet("background-color: #ffcccc;")
+                else:
+                    row['cycles'].setStyleSheet("")
+
+                # Pausen-Schutz
+                if p > MAX_PAUSE:
+                    p = MAX_PAUSE
+                    row['pause'].setText(str(MAX_PAUSE))
+                    row['pause'].setStyleSheet("background-color: #ffcccc;")
+                elif p < 0:
+                    p = 0.0
+                    row['pause'].setText("0.0")
+                    row['pause'].setStyleSheet("background-color: #ffcccc;")
+                else:
+                    row['pause'].setStyleSheet("")
+
+                # Frequenz berechnen
                 freq_hz = self.calculate_frequency(slope_v_ms, a)
                 duration_s = c / freq_hz if freq_hz > 0 else 0.0
 
                 print(f"[{idx+1}/{len(self.signal_rows)}] Vpp={a}V | Frequenz: {freq_hz:.2f} Hz | Laufzeit: {duration_s:.5f}s")
 
+                # Werte an die Library übergeben
                 my_instrument.set_frequency(freq_hz, "Hz")
                 QtTest.QTest.qWait(100)
                 my_instrument.set_amplitude(a)
@@ -339,6 +403,7 @@ class Form(QDialog):
                     QtTest.QTest.qWait(int(p * 1000))
 
             print("--- Sequenz erfolgreich beendet ---")
+            self.plot_preview() # Aktualisiert auch die Grafik mit den korrigierten Werten
 
         except ValueError:
             print("Fehler: Bitte überprüfe die Zahlenwerte!")
