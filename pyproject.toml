@@ -1,15 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "afg2225-library-master"
-version = "0.1.0"
-description = "Add your description here"
+name = "afg2225-library"
+version = "0.2.0"
+description = "Python library and dynamic GUI to control arbitrary function generator GW Instek AFG-2225 via USB."
 readme = "README.md"
-requires-python = ">=3.14"
-dependencies = [
-    "matplotlib>=3.11.0",
-    "numpy>=2.5.1",
-    "pyqt5>=5.15.11",
-    "pyserial>=3.5",
-    "pyusb>=1.3.1",
-    "pyvisa>=1.16.2",
-    "pyvisa-py>=0.8.1",
+authors = [
+    { name = "Luis Groß", email = "luis.gross.privat@gmail.com" }
 ]
+license = { text = "GNU 3.0" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+# Hier werden alle benötigten Abhängigkeiten fest für das Projekt hinterlegt
+dependencies = [
+    "pyvisa",
+    "pyvisa-py",
+    "pyusb",
+    "PyQt5",
+    "matplotlib",
+    "numpy",
+    "pyserial>=3.5",
+]
+
+[tool.setuptools]
+packages = ["afg2225library"]
