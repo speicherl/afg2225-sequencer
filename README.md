@@ -1,88 +1,66 @@
-# GW-Instek AFG-2225 Rampen-Sequenzer
+# GW-Instek AFG-2225 Rampen-Sequenzer & Live-Control
 
-Dieses Python-Programm bietet eine grafische PyQt5-Oberfläche zur präzisen Steuerung des Funktionsgenerators **GW-Instek AFG-2225** über eine USB-Verbindung. 
+Dieses Python-Programm bietet eine grafische Oberfläche auf Basis von **PyQt6** zur präzisen Steuerung des Funktionsgenerators **GW-Instek AFG-2225** über eine USB-Verbindung. 
 
-Das Tool erlaubt es, eine zeitliche Abfolge von Dreieckssignalen (Rampen) mit **konstanter Flankensteilheit (V/ms)** zu definieren, abzuspeichern und an das Gerät zu übertragen. Jedes Signal wird über seine Amplitude und die exakte Anzahl an Schwingungsperioden (`Cycles`) definiert, was einen phasenreinen Übergang ohne Signalabrisse garantiert.
+Das Tool erlaubt es zum einen, eine zeitliche Abfolge von Dreieckssignalen (Rampen) mit **konstanter Flankensteilheit (V/ms)** zu programmieren, und bringt zum anderen ein separates **Live-Direktansteuerungs-Fenster** mit, um Einstellungen spontan und verzögerungsfrei an die Hardware zu senden.
 
 ## 🚀 Features
 * **Dynamische Signalabfolge:** Beliebig viele Teilsignale per Knopfdruck hinzufügen oder entfernen.
-* **Konstante Flankensteilheit (V/ms):** Die Software berechnet die notwendige Zielfrequenz für jede Amplitude automatisch, sodass alle Flanken physikalisch parallel laufen.
-* **Interaktive Vorschau:** Echtzeit-Plotter mit Zoom- und Verschiebe-Werkzeug (Matplotlib) zur Sichtung des Soll-Signals.
-* **Speicherfunktion:** Erstellte Sequenzen als `.json`-Datei sichern und jederzeit wieder laden.
-* **Hardware-Schutzschaltung:** Automatische Filterung unzulässiger Werte vor der Übertragung (Schutz vor Überspannungen).
+* **Echte Hardware-Pausen:** Schaltet den Ausgang bei definierten Pausenzeiten über das Relais komplett ab und phasenrein für das nächste Signal wieder an. Automatic-Auto-Stop am Ende der Sequenz.
+* **Interaktive Vorschau:** Echtzeit-Plotter (Matplotlib) zur visuellen Überprüfung der Soll-Sequenz vor dem Hardware-Start.
+* **🎛️ Live-Direktansteuerung:** Ein auswählbares Zweitfenster zur On-the-fly-Regelung von Frequenz, Amplitude, DC-Offset und Signalform (inkl. globalem "Burst/Sweep-Aus"-Schalter).
+* **Automatischer Port-Scan:** Erkennt beim Start und per Refresh-Button angeschlossene Geräte plattformübergreifend (COM-Ports unter Windows, `/dev/ttyACM` unter Linux).
+* **Speicherfunktion:** Erstellte Sequenzen als `.json`-Datei sichern und laden.
+
+---
+
+## 📁 Projektstruktur
+* `sequencer_GUI.py` — Das Hauptfenster für die grafische Rampen-Sequenzverwaltung.
+* `live_control.py` — Das modulare Zusatzfenster für die Live-Direktansteuerung.
+* `afg2225library/` — Der Kern-Ordner mit den Hardware-Treibermethoden des Generators.
+* `pyproject.toml` & `uv.lock` — Moderne Konfigurations- und Sperrdateien für den `uv`-Paketmanager.
 
 ---
 
 ## 🔌 Treiber-Installation & Vorbereitung
 
-Damit Python mit dem GW-Instek AFG-2225 kommunizieren kann, muss das System wissen, wie es den USB-VCP (Virtual COM Port) des Geräts ansprechen soll.
+Dank des Python-nativen VISA-Backends benötigt das System **keine proprietären Treiber von National Instruments (NI)** unter Linux!
 
-### 🐧 Unter Linux (Keine externen Treiber nötig)
-Unter Linux bringt der Kernel bereits alles mit (`cdc_acm` Modul). Das Gerät wird automatisch als `/dev/ttyACM0` (oder ähnlich) eingebunden. 
+### 🐧 Unter Linux (Fedora, Pop!_OS, Ubuntu, Mint)
+Der Linux-Kernel erkennt den Generator automatisch als virtuellen seriellen Port (`/dev/ttyACM0`). Du musst deinem Benutzer lediglich Zugriffsrechte für die Schnittstelle gewähren:
 
-Du musst lediglich dafür sorgen, dass Python-native Treiber genutzt werden und dein Benutzer die Rechte hat:
 1. **USB-Zugriff erlauben:**
    ```bash
    sudo usermod -a -G dialout $USER
    ```
+*Danach einmal vom System abmelden und neu anmelden, damit die Gruppenrechte aktiv werden.*
 
-*Danach einmal vom System abmelden und neu anmelden, damit die Rechte aktiv werden.*
+### 🪟 Unter Windows
 
-2. **Pakete:** Die Pakete `pyvisa-py` und `pyusb` (werden von `uv` automatisch installiert) emulieren die komplette VISA-Schicht in purem Python. Keine Software von National Instruments erforderlich.
+Unter Windows wird ein Standard-USB-VCP (Virtual COM Port) Treiber benötigt, damit das Gerät im Geräte-Manager einen festen Port (z. B. `COM10`) zugewiesen bekommt. Die Kommunikation wird im Code komplett über das schlanke Python-native Serial-Backend abgewickelt.
 
-### 🪟 Unter Windows (NI-VISA benötigt)
-
-Windows benötigt einen dedizierten VISA-Treiberstack, um das USB-Gerät als VISA-Ressource registrieren zu können.
-
-1. **NI-VISA herunterladen:**
-* Gehe auf die offizielle Support-Seite von National Instruments: [NI-VISA Download](https://www.google.com/search?q=https://www.ni.com/de-de/support/downloads/drivers/download.ni-visa.html)
-* Wähle die aktuellste Version aus.
-* Wähle als Betriebssystem **Windows** und klicke auf **Herunterladen**.
-
-
-2. **Installation:**
-* Starte den Installer (die `.exe`-Datei).
-* Im Installations-Assistenten reicht die Standardauswahl (du brauchst *keine* Entwicklungs-Add-Ons für C++ oder LabVIEW, sondern nur die **NI-VISA Runtime**).
-* Starte den Computer nach der Installation einmal neu.
-
-
-3. **Gerät überprüfen (Optional):**
-* Schließe den AFG-2225 per USB an deinen PC an und schalte ihn ein.
-* Öffne das Programm **NI MAX** (NI Measurement & Automation Explorer), das mitinstalliert wurde.
-* Unter "Geräte und Schnittstellen" sollte der Generator nun auftauchen (z. B. als `ASRL3::INSTR` oder unter einem spezifischen COM-Port wie `COM3`).
-
-
-
----
+   Download AFG-2225 USB driver from GW Instek Website:
+   https://www.gwinstek.com/en-global/products/detail/AFG-2225
 
 ## 🛠️ Installation & Start mit uv (Empfohlen)
 
-Wenn du den modernen Python-Paketmanager `uv` nutzt, musst du Python nicht manuell verwalten oder virtuelle Umgebungen händisch aktivieren. `uv` erledigt alles isoliert im Hintergrund.
+Das Projekt nutzt den modernen Python-Paketmanager `uv`. Dieser verwaltet Python-Versionen (voll kompatibel mit Python 3.14+) und Abhängigkeiten isoliert im Hintergrund, ohne dein System zu belasten.
 
 1. **Repository klonen & in den Ordner wechseln:**
 ```bash
-git clone <git@github.com:speicherl/afg2225-sequencer.git
->
+git clone https://github.com/speicherl/afg2225-sequencer.git
 cd afg2225-sequencer
 ```
 
 
-2. **Abhängigkeiten automatisch installieren und App starten:**
-Führe einfach den folgenden Befehl aus. `uv` erstellt selbstständig eine virtuelle Umgebung, installiert alle nötigen Pakete (`PyQt5`, `matplotlib`, `numpy`, `pyvisa`, `pyvisa-py`, `pyusb`) und startet die GUI:
+2. **App via uv starten:**
+Führe einfach den folgenden Befehl im Hauptverzeichnis aus. `uv` installiert automatisch alle benötigten Abhängigkeiten (`PyQt6`, `matplotlib`, `numpy`, `pyvisa-py`, `pyserial`) in eine virtuelle Umgebung und startet die Anwendung:
 ```bash
 uv run sequencer_GUI.py
 ```
 
 
-3. **💡 Linux-Spezifischer Start:**
-Zwinge PyVISA über eine Umgebungsvariable, das Python-native Treiber-Modul zu nutzen:
-```bash
-PYVISA_LIBRARY="@py" uv run sequencer_GUI.py
-```
-
-
-4. **💡 Windows-Spezifische Anpassung:**
-Öffne die `sequencer_GUI.py` und passe ganz unten im `__main__`-Block die Adresse von `ASRL/dev/ttyACM0::INSTR` auf deinen Windows-Port an (z. B. `COM3` oder `ASRL3::INSTR` – einsehbar im Windows Geräte-Manager). Danach in der Eingabeaufforderung (cmd) starten:
-```cmd
-uv run sequencer_GUI.py
-```
+3. **Bedienung der Hardware:**
+* Klicke oben im Fenster auf **🔄 Aktualisieren**, um die USB-Kanäle zu scannen.
+* Wähle den erkannten Port aus (z. B. `/dev/ttyACM0` oder `COM10`) und klicke auf **⚡ Verbinden**.
+* Nach erfolgreichem Verbindungsaufbau werden alle Steuerungselemente sowie das Live-Fenster freigeschaltet.
