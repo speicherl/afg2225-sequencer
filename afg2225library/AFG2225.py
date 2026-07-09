@@ -185,6 +185,24 @@ class AFG2225:
         codeword = self.format_str(amplitude * unit_dict[unit], 6)
         self.send_command(command, query, codeword)
 
+    def set_ramp_symmetry(self, symmetry, channel=1):
+     """
+     Function to change the symmetry (slope) of a ramp/triangle wave.
+
+     :param symmetry: Value from 0.0 to 100.0 (percent)
+     :param channel: States which channel is modified. default: channel=1
+     """
+     try:
+         symmetry = max(0.0, min(100.0, float(symmetry)))
+         syntax = "SOURCE" + str(channel) + ":RAMP:SYMMetry"
+         command = syntax + " " + str(symmetry)
+         query = syntax + "?"
+         codeword = self.format_str(symmetry, 5)
+         self.send_command(command, query, codeword)
+     except Exception as e:
+         print("Error while setting ramp symmetry:", e)
+
+
     def turn_on(self, channel=1):
         """
         Turns a channel on.
