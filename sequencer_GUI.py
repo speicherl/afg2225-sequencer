@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (QLineEdit, QPushButton, QApplication, QGroupBox, QF
                              QVBoxLayout, QDialog, QLabel, QHBoxLayout, QScrollArea, QWidget, QComboBox)
 import pyvisa
 from PyQt6 import QtTest
+from PyQt6.QtGui import QDoubleValidator
 from afg2225library import AFG2225
 from live_control import LiveControlDialog
 
@@ -93,6 +94,10 @@ class Form(QDialog):
         glob_layout.addWidget(QLabel("Konstanter DC-Offset (V):"))
         self.edit_offset = QLineEdit("0.0")
         glob_layout.addWidget(self.edit_offset)
+        double_validator = QDoubleValidator()
+        double_validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        self.edit_slope.setValidator(double_validator)
+        self.edit_offset.setValidator(double_validator)
         glob_group.setLayout(glob_layout)
         left_v_layout.addWidget(glob_group)
         
@@ -350,9 +355,16 @@ class Form(QDialog):
             print(f"Fehler beim Laden: {e}")
 
     def generate_ramp_data(self, t_start, duration, freq_hz, amp_vpp, offset):
-        t = np.linspace(t_start, t_start + duration, max(2, int(duration * 50000)))
-        if freq_hz <= 0:
+        if freq_hz <= 0 or duration <= 0:
+            t = np.linspace(t_start, t_start + duration, 2)
             return t, np.zeros_like(t) + offset
+
+        # Garantiere mindestens 100 Punkte pro Schwingung (Zyklus), aber mindestens 200 Punkte insgesamt
+        cycles = duration * freq_hz
+        num_points = max(200, int(cycles * 100))
+
+        t = np.linspace(t_start, t_start + duration, num_points)
+
         phase = ((t - t_start) * freq_hz + 0.25) % 1.0
         y = np.zeros_like(phase)
         mask1 = phase <= 0.5
@@ -407,7 +419,7 @@ class Form(QDialog):
                 span = max(max_val - min_val, 1.0)
                 self.canvas.axes.set_ylim(min_val - 0.2 * span, max_val + 0.2 * span)
                 
-            self.canvas.draw()
+            self.canvas.draw_idle()
         except ValueError:
             pass
 
