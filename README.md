@@ -19,6 +19,7 @@ Das Tool erlaubt es zum einen, eine zeitliche Abfolge von Dreieckssignalen (Ramp
 * `live_control.py` — Das modulare Zusatzfenster für die Live-Direktansteuerung.
 * `afg2225library/` — Der Kern-Ordner mit den Hardware-Treibermethoden des Generators.
 * `pyproject.toml` & `uv.lock` — Moderne Konfigurations- und Sperrdateien für den `uv`-Paketmanager.
+* `sequencer_GUI.spec` — Build-File für Compile-Prozess
 
 ---
 
@@ -39,7 +40,7 @@ Der Linux-Kernel erkennt den Generator automatisch als virtuellen seriellen Port
 
 Unter Windows wird ein Standard-USB-VCP (Virtual COM Port) Treiber benötigt, damit das Gerät im Geräte-Manager einen festen Port (z. B. `COM10`) zugewiesen bekommt. Die Kommunikation wird im Code komplett über das schlanke Python-native Serial-Backend abgewickelt.
 
-   Download AFG-2225 USB driver from GW Instek Website:
+   Download AFG-2225 USB Treiber von GW Instek Website:
    https://www.gwinstek.com/en-global/products/detail/AFG-2225
 
 ## 🛠️ Installation & Start mit uv (Empfohlen)
@@ -64,6 +65,13 @@ uv run sequencer_GUI.py
 * Klicke oben im Fenster auf **🔄 Aktualisieren**, um die USB-Kanäle zu scannen.
 * Wähle den erkannten Port aus (z. B. `/dev/ttyACM0` oder `COM10`) und klicke auf **⚡ Verbinden**.
 * Nach erfolgreichem Verbindungsaufbau werden alle Steuerungselemente sowie das Live-Fenster freigeschaltet.
+
+---
+
+## Compiling für ausführbare Datei
+```bash
+uvx --with . pyinstaller sequencer_GUI.spec
+```
 
 ---
 
