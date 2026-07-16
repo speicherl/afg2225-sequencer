@@ -72,6 +72,7 @@ uv run sequencer_GUI.py
 ```bash
 uvx --with . pyinstaller sequencer_GUI.spec
 ```
+Die ausführbare Datei leigt dann im ordner `dist`
 
 ---
 
